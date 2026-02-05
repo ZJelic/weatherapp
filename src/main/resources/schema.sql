@@ -9,6 +9,17 @@ CREATE TABLE weather_station (
                                  elevation DOUBLE
 );
 
+DROP TABLE IF EXISTS weather_update;
+
+CREATE TABLE weather_update (
+                                id SERIAL PRIMARY KEY,
+                                station_id BIGINT NOT NULL,
+                                temperature DOUBLE NOT NULL,
+                                wind_speed DOUBLE NOT NULL,
+                                timestamp TIMESTAMP NOT NULL,
+                                FOREIGN KEY (station_id) REFERENCES weather_station(id)
+);
+
 -- CREATE TABLE weather_measurement (
 --                                      id SERIAL PRIMARY KEY,
 --                                      station_id INT NOT NULL,

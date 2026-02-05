@@ -11,9 +11,17 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
-                .csrf(csrf -> csrf.disable());
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/h2-console/**").permitAll() // allow h2 console
+                        .anyRequest().permitAll()
+                )
+                .csrf(csrf -> csrf
+                        .ignoringRequestMatchers("/h2-console/**") // disable CSRF for h2
+                )
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.sameOrigin()) // allow iframe for h2 console
+                );
+
         return http.build();
     }
-
 }

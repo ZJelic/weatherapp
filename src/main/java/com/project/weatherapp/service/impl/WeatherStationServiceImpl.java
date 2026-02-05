@@ -3,6 +3,7 @@ package com.project.weatherapp.service.impl;
 import com.project.weatherapp.dto.CreateWeatherStationRequest;
 import com.project.weatherapp.dto.WeatherDataDTO;
 import com.project.weatherapp.dto.WeatherStationDTO;
+import com.project.weatherapp.dto.WeatherUpdateMessage;
 import com.project.weatherapp.entity.WeatherStation;
 import com.project.weatherapp.exception.NotFoundException;
 import com.project.weatherapp.mapper.WeatherStationMapper;
@@ -16,6 +17,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -95,15 +97,20 @@ public class WeatherStationServiceImpl implements WeatherStationService {
                 ws.getName(), ws.getLatitude(), ws.getLongitude());
 
         try {
-            WeatherDataDTO weather = openMeteoService.getCurrentWeather(ws.getLatitude(), ws.getLongitude());
+            WeatherDataDTO weather =
+                    openMeteoService.getCurrentWeather(ws.getLatitude(), ws.getLongitude());
+
             log.info("Received weather for station {}: {}", ws.getName(), weather);
 
-            // Send Kafka message
-            String message = String.format(
-                    "Weather update for station %s (ID: %d) - Temp: %.2f°C, Wind Speed: %.2f m/s",
-                    ws.getName(), ws.getId(), weather.temperature(), weather.windspeed()
+            WeatherUpdateMessage event = new WeatherUpdateMessage(
+                    ws.getId(),
+                    ws.getName(),
+                    weather.temperature(),
+                    weather.windspeed(),
+                    LocalDateTime.now()
             );
-            weatherProducerService.sendWeatherUpdate(message);
+
+            weatherProducerService.sendWeatherUpdate(event);
 
             return weather;
 
@@ -113,4 +120,5 @@ public class WeatherStationServiceImpl implements WeatherStationService {
             throw ex;
         }
     }
+
 }
