@@ -14,6 +14,8 @@ import com.project.weatherapp.kafka.WeatherProducerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
@@ -40,12 +42,11 @@ public class WeatherStationServiceImpl implements WeatherStationService {
     }
 
     @Override
-    public List<WeatherStationDTO> findAll() {
-        log.info("Fetching all weather stations");
-        return repository.findAll()
-                .stream()
-                .map(mapper::toDTO)
-                .toList();
+    public Page<WeatherStationDTO> findAll(Pageable pageable) {
+        log.info("Fetching weather stations with pagination: {}", pageable);
+
+        return repository.findAll(pageable)
+                .map(mapper::toDTO);
     }
 
     @Override
