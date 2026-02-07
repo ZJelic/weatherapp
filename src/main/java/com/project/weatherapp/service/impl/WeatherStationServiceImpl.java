@@ -6,18 +6,17 @@ import com.project.weatherapp.dto.WeatherStationDTO;
 import com.project.weatherapp.dto.WeatherUpdateMessage;
 import com.project.weatherapp.entity.WeatherStation;
 import com.project.weatherapp.exception.NotFoundException;
+import com.project.weatherapp.kafka.WeatherProducerService;
 import com.project.weatherapp.mapper.WeatherStationMapper;
 import com.project.weatherapp.repository.WeatherStationRepository;
 import com.project.weatherapp.service.OpenMeteoService;
 import com.project.weatherapp.service.WeatherStationService;
-import com.project.weatherapp.kafka.WeatherProducerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -35,8 +34,10 @@ public class WeatherStationServiceImpl implements WeatherStationService {
     @Override
     public WeatherStationDTO create(CreateWeatherStationRequest request) {
         log.info("Creating weather station with name: {}", request.name());
+
         WeatherStation entity = mapper.toEntity(request);
         WeatherStation saved = repository.save(entity);
+
         log.info("Weather station saved with ID: {}", saved.getId());
         return mapper.toDTO(saved);
     }
@@ -52,35 +53,51 @@ public class WeatherStationServiceImpl implements WeatherStationService {
     @Override
     public WeatherStationDTO findById(Long id) {
         log.info("Fetching weather station with ID: {}", id);
+
         return repository.findById(id)
                 .map(mapper::toDTO)
-                .orElseThrow(() -> new NotFoundException("Weather station with ID " + id + " not found"));
+                .orElseThrow(() ->
+                        new NotFoundException("Weather station with ID " + id + " not found"));
     }
 
     @Override
     public WeatherStationDTO update(Long id, CreateWeatherStationRequest request) {
         log.info("Updating weather station with ID: {}", id);
+
         WeatherStation entity = repository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Weather station with ID " + id + " not found"));
-        log.info("Before update: {}", entity);
+                .orElseThrow(() ->
+                        new NotFoundException("Weather station with ID " + id + " not found"));
+
+        log.debug("Before update: {}", entity);
+
         mapper.updateFromRequest(request, entity);
         WeatherStation updated = repository.save(entity);
-        log.info("After update: {}", updated);
+
+        log.debug("After update: {}", updated);
         return mapper.toDTO(updated);
     }
 
     @Override
-    public List<WeatherStationDTO> findByArea(double latStart, double latEnd, double lonStart, double lonEnd) {
-        log.info("Searching weather stations in area: lat({}-{}), lon({}-{})", latStart, latEnd, lonStart, lonEnd);
+    public List<WeatherStationDTO> findByArea(
+            double latStart, double latEnd,
+            double lonStart, double lonEnd) {
+
+        log.info("Searching weather stations in area: lat({}-{}), lon({}-{})",
+                latStart, latEnd, lonStart, lonEnd);
+
         List<WeatherStationDTO> stations = repository
-                .findByLatitudeBetweenAndLongitudeBetween(latStart, latEnd, lonStart, lonEnd)
+                .findByLatitudeBetweenAndLongitudeBetween(
+                        latStart, latEnd, lonStart, lonEnd)
                 .stream()
                 .map(mapper::toDTO)
                 .toList();
 
         if (stations.isEmpty()) {
             throw new NotFoundException(
-                    String.format("No weather stations found in area lat(%s-%s) lon(%s-%s)", latStart, latEnd, lonStart, lonEnd)
+                    String.format(
+                            "No weather stations found in area lat(%s-%s) lon(%s-%s)",
+                            latStart, latEnd, lonStart, lonEnd
+                    )
             );
         }
 
@@ -88,7 +105,7 @@ public class WeatherStationServiceImpl implements WeatherStationService {
     }
 
     @Override
-    @Cacheable(value = "weather", key = "#stationId")
+    @Cacheable(cacheNames = "weather", key = "'station:' + #stationId")
     public WeatherDataDTO getCurrentWeather(Long stationId) {
 
         WeatherStation ws = repository.findById(stationId)
@@ -97,29 +114,22 @@ public class WeatherStationServiceImpl implements WeatherStationService {
         log.info("Fetching weather for station {} ({}, {})",
                 ws.getName(), ws.getLatitude(), ws.getLongitude());
 
-        try {
-            WeatherDataDTO weather =
-                    openMeteoService.getCurrentWeather(ws.getLatitude(), ws.getLongitude());
+        WeatherDataDTO weather =
+                openMeteoService.getCurrentWeather(
+                        ws.getLatitude(), ws.getLongitude());
 
-            log.info("Received weather for station {}: {}", ws.getName(), weather);
+        log.info("Received weather for station {}: {}", ws.getName(), weather);
 
-            WeatherUpdateMessage event = new WeatherUpdateMessage(
-                    ws.getId(),
-                    ws.getName(),
-                    weather.temperature(),
-                    weather.windspeed(),
-                    LocalDateTime.now()
-            );
+        WeatherUpdateMessage event = new WeatherUpdateMessage(
+                ws.getId(),
+                ws.getName(),
+                weather.temperature(),
+                weather.windspeed(),
+                LocalDateTime.now()
+        );
 
-            weatherProducerService.sendWeatherUpdate(event);
+        weatherProducerService.sendWeatherUpdate(event);
 
-            return weather;
-
-        } catch (RestClientException ex) {
-            log.error("Open-Meteo API failed for station {} ({}, {})",
-                    ws.getName(), ws.getLatitude(), ws.getLongitude(), ex);
-            throw ex;
-        }
+        return weather;
     }
-
 }
